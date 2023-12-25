@@ -62,7 +62,7 @@ class Cost (χ : Type) extends LE χ, Add χ where
   /--
   Compute the cost of a new line.
   -/
-  nl : χ
+  nl : (indent : Nat) → χ
 
 /--
 A `Measure` contains a `Doc` along with meta information from the rendering process.
@@ -147,7 +147,7 @@ def MeasureSet.merge [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Meas
 This function efficiently computes a Pareto front for the problem of rendering
 a `Doc` at a certain column position with a certain indentation level and width limit.
 -/
-def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col : Nat) (indent : Nat) (widthLimit : Nat) : MeasureSet χ :=
+def Doc.resolve [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col indent widthLimit : Nat) : MeasureSet χ :=
   -- If we were to exceed the widthLimit we delay any attempt to optimize
   -- the layout of `doc` in hopes that another branch of this function finds
   -- a non tainted `MeasureSet`.
@@ -182,7 +182,7 @@ where
     | .newline =>
       .set [{
         last := indent,
-        cost := Cost.nl,
+        cost := Cost.nl indent,
         layout := doc
       }]
     | .concat lhs rhs => processConcat (fun l => core rhs l.last indent) (core lhs col indent)
