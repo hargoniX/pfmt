@@ -241,8 +241,11 @@ deriving Inhabited
 Render a choice less `Doc`.
 -/
 def Doc.render (doc : Doc) (col : Nat) : String :=
-  Array.foldl (init := "") String.append (go doc col 0)
+  Array.foldl (init := "") (· ++ "\n" ++ ·) (go doc col 0)
 where
+  /--
+  A straight forward implementation of the choice less document semantics from Fig 8.
+  -/
   go (doc : Doc) (col indent : Nat) : Array String := Id.run do
     match doc with
     | .text str => #[str]
@@ -266,6 +269,8 @@ where
         lrender
     | .choice .. => panic! "Not a choice less document"
 
+#eval IO.println <| Doc.render (.text "f" ++ .text "(" ++ .align (.newline ++ .text "x") ++ .newline ++ .text ")") 0
+
 /--
 Find an optimal layout for a document and render it.
 -/
@@ -281,5 +286,50 @@ def Doc.print [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : 
     isTainted := isTainted,
     cost := measure.cost
   }
+
+def Doc.comma : Doc := .text ","
+def Doc.lbrack : Doc := .text "["
+def Doc.rbrack : Doc := .text "]"
+def Doc.lbrace : Doc := .text "{"
+def Doc.rbrace : Doc := .text "}"
+def Doc.lparen : Doc := .text "("
+def Doc.rparen : Doc := .text ")"
+def Doc.dquote : Doc := .text "\""
+def Doc.empty : Doc := .text ""
+def Doc.space : Doc := .text " "
+
+structure DefaultCost where
+  widthCost : Nat
+  lineCost : Nat
+  deriving Inhabited, Repr
+
+def DefaultCost.add (lhs rhs : DefaultCost) : DefaultCost :=
+  { widthCost := lhs.widthCost + rhs.widthCost, lineCost := lhs.lineCost + rhs.lineCost }
+
+instance : Add DefaultCost where
+  add := DefaultCost.add
+
+def DefaultCost.le (lhs rhs : DefaultCost) : Bool :=
+  if lhs.widthCost == rhs.widthCost then lhs.lineCost ≤ rhs.lineCost else lhs.widthCost < rhs.widthCost
+
+instance foo : LE DefaultCost where
+  le lhs rhs := DefaultCost.le lhs rhs
+
+instance : DecidableRel (LE.le (α := DefaultCost)) := fun _ _ => Bool.decEq _ _
+
+def DefaultCost.text (widthLimit : Nat) (col : Nat) (length : Nat) : DefaultCost :=
+  if col + length > widthLimit then
+    let a := max widthLimit col - widthLimit
+    let b := col + length - max widthLimit col
+    { widthCost := b * (2 * a + b), lineCost := 0 }
+  else
+    { widthCost := 0, lineCost := 0 }
+
+def DefaultCost.nl (_indent : Nat) : DefaultCost :=
+  { widthCost := 0, lineCost := 1 }
+
+instance : Cost DefaultCost where
+  text := DefaultCost.text
+  nl := DefaultCost.nl
 
 end Pfmt
