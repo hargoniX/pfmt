@@ -43,7 +43,7 @@ Render `doc` with the indentation level set to the column position.
 Make a choice between rendering either `lhs` or `rhs` by picking the prettier variant.
 -/
 | choice (lhs rhs : Doc)
-deriving Inhabited
+deriving Inhabited, Repr
 
 instance : Append Doc where
   append lhs rhs := .concat lhs rhs
@@ -80,7 +80,8 @@ structure Measure (χ : Type) where
   /--
   The choice less document that we are contemplating to use.
   -/
-  layout : Doc
+  -- TODO: Maybe Array?
+  layout : List String → List String
 deriving Inhabited
 
 instance [Cost χ] : LE (Measure χ) where
@@ -93,7 +94,7 @@ instance [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : Measure χ) : De
 Lifting `Doc.concat` to `Measure`.
 -/
 def Measure.concat [Cost χ] (lhs rhs : Measure χ) : Measure χ :=
-  { last := rhs.last, cost := lhs.cost + rhs.cost, layout := lhs.layout ++ rhs.layout }
+  { last := rhs.last, cost := lhs.cost + rhs.cost, layout := fun ss => lhs.layout (rhs.layout ss) }
 
 instance [Cost χ] : Append (Measure χ) where
   append := Measure.concat
@@ -119,20 +120,20 @@ deriving Inhabited
 If `MeasureSet.merge` receives two `MeasureSet.set` we use this operation to combine them
 into a new Pareto front with correct ordering.
 -/
-private def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List (Measure χ)) : List (Measure χ) :=
+private def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List (Measure χ)) (acc : List (Measure χ) := []) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
-  | [], _ => rhs
+  | [], _ => acc ++ rhs
   | _, [] => lhs
   | l :: ls, r :: rs =>
     if l ≤ r then
-      mergeSet lhs rs
+      mergeSet lhs rs acc
     else if r ≤ l then
-      mergeSet ls rhs
+      mergeSet ls rhs acc
     else if l.last > r.last then
-      l :: mergeSet ls rhs
+      mergeSet ls rhs (l :: acc)
     else
-      r :: mergeSet lhs rs
-termination_by mergeSet lhs rhs => lhs.length + rhs.length
+      mergeSet lhs rs (r :: acc)
+termination_by mergeSet lhs rhs acc => lhs.length + rhs.length
 
 /--
 Combine the results from two `MeasureSet`s.
@@ -177,13 +178,13 @@ where
       .set [{
         last := col + s.length,
         cost := Cost.text widthLimit col s.length
-        layout := doc
+        layout := fun ss => s :: ss
       }]
     | .newline =>
       .set [{
         last := indent,
         cost := Cost.nl indent,
-        layout := doc
+        layout := fun ss => "\n" :: "".pushn ' ' indent :: ss
       }]
     | .concat lhs rhs => processConcat (fun l => core rhs l.last indent) (core lhs col indent)
     | .choice lhs rhs => MeasureSet.merge (core lhs col indent) (core rhs col indent)
@@ -238,10 +239,11 @@ structure PrintResult (χ : Type) where
 deriving Inhabited
 
 /--
-Render a choice less `Doc`.
+Render a choice less `Doc`. For choiceful documents use `Doc.prettyPrint`.
 -/
 def Doc.render (doc : Doc) (col : Nat) : String :=
-  Array.foldl (init := "") (· ++ "\n" ++ ·) (go doc col 0)
+  dbg_trace repr doc
+  String.intercalate "\n" (go doc col 0).toList
 where
   /--
   A straight forward implementation of the choice less document semantics from Fig 8.
@@ -269,12 +271,10 @@ where
         lrender
     | .choice .. => panic! "Not a choice less document"
 
-#eval IO.println <| Doc.render (.text "f" ++ .text "(" ++ .align (.newline ++ .text "x") ++ .newline ++ .text ")") 0
-
 /--
 Find an optimal layout for a document and render it.
 -/
-def Doc.print [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : PrintResult χ :=
+def Doc.print (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : PrintResult χ :=
   let measures := doc.resolve (χ := χ) col 0 widthLimit
   let (measure, isTainted) :=
     match measures with
@@ -282,10 +282,13 @@ def Doc.print [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : 
     | .set (measure :: _) => (measure, false)
     | .set [] => panic! "Empty measure sets are impossible"
   {
-    layout := doc.render col,
+    layout := String.join (measure.layout []),
     isTainted := isTainted,
     cost := measure.cost
   }
+
+def Doc.prettyPrint (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : String :=
+  Doc.print χ doc col widthLimit |>.layout
 
 def Doc.comma : Doc := .text ","
 def Doc.lbrack : Doc := .text "["
