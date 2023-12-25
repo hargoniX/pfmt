@@ -78,7 +78,7 @@ structure Measure (χ : Type) where
   -/
   cost : χ
   /--
-  The document that we are contemplating to use.
+  The choice less document that we are contemplating to use.
   -/
   layout : Doc
 deriving Inhabited
@@ -209,7 +209,7 @@ where
     | .set lefts =>
        let concatOneWithRight (l : Measure χ) : MeasureSet χ :=
          -- This is an optimized version of dedup from the paper. We use it to maintain
-         -- the pareto front invariant.
+         -- the Pareto front invariant.
          let rec dedup (rights result : List (Measure χ)) (currentBest : Measure χ) : List (Measure χ) :=
            match rights with
            | [] => List.reverse (currentBest :: result)
@@ -231,5 +231,55 @@ where
          | l :: ls => MeasureSet.merge (concatOneWithRight l) (concatAllWithRight ls)
        concatAllWithRight lefts
 
+structure PrintResult (χ : Type) where
+  layout : String
+  isTainted : Bool
+  cost : χ
+deriving Inhabited
+
+/--
+Render a choice less `Doc`.
+-/
+def Doc.render (doc : Doc) (col : Nat) : String :=
+  Array.foldl (init := "") String.append (go doc col 0)
+where
+  go (doc : Doc) (col indent : Nat) : Array String := Id.run do
+    match doc with
+    | .text str => #[str]
+    | .newline => #["", "".pushn ' ' indent]
+    | .align doc => go doc col col
+    | .nest indentOffset doc => go doc col (indent + indentOffset)
+    | .concat lhs rhs =>
+      let mut lrender := go lhs col indent
+      if lrender.size == 1 then
+        let lfirst := lrender[0]!
+        let mut rrender := go rhs (col + lfirst.length) indent
+        let rfirst := rrender[0]!
+        rrender := rrender.set! 0 (lfirst ++ rfirst)
+        rrender
+      else
+        let llast := lrender[lrender.size - 1]!
+        let rrender := go rhs (llast.length) indent
+        let rfirst := rrender[0]!
+        lrender := lrender.set! (lrender.size - 1) (llast ++ rfirst)
+        lrender := lrender ++ rrender[0:(rrender.size - 1)]
+        lrender
+    | .choice .. => panic! "Not a choice less document"
+
+/--
+Find an optimal layout for a document and render it.
+-/
+def Doc.print [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : PrintResult χ :=
+  let measures := doc.resolve (χ := χ) col 0 widthLimit
+  let (measure, isTainted) :=
+    match measures with
+    | .tainted thunk => (thunk (), true)
+    | .set (measure :: _) => (measure, false)
+    | .set [] => panic! "Empty measure sets are impossible"
+  {
+    layout := doc.render col,
+    isTainted := isTainted,
+    cost := measure.cost
+  }
 
 end Pfmt
