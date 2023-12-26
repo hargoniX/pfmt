@@ -18,9 +18,9 @@ Render a `String` that does not contain newlines.
 -/
 | text (s : String)
 /--
-Render a newline.
+Render a newline. Also contains an alternative rendering for the newline for `Doc.flatten`.
 -/
-| newline
+| newline (s : String)
 /--
 Concatenate two documents unaligned. If `l` is the chars that we get from `lhs`
 and `r` from `rhs` they will render as:
@@ -43,6 +43,12 @@ Render `doc` with the indentation level set to the column position.
 Make a choice between rendering either `lhs` or `rhs` by picking the prettier variant.
 -/
 | choice (lhs rhs : Doc)
+/--
+Reset the indentation level to 0.
+-/
+| reset (doc : Doc)
+-- TODO: Think about adding the cost constructor. It does however make type inference much harder
+-- TODO: Think about adding fail.
 deriving Inhabited, Repr
 
 instance : Append Doc where
@@ -180,7 +186,7 @@ where
         cost := Cost.text widthLimit col s.length
         layout := fun ss => s :: ss
       }]
-    | .newline =>
+    | .newline _ =>
       .set [{
         last := indent,
         cost := Cost.nl indent,
@@ -190,6 +196,7 @@ where
     | .choice lhs rhs => MeasureSet.merge (core lhs col indent) (core rhs col indent)
     | .nest indentOffset doc => core doc col (indent + indentOffset)
     | .align doc => core doc col col
+    | .reset doc => core doc col 0
 
   /--
   Compute the set that contains the concatenations of all possible lhs measures
@@ -251,7 +258,7 @@ where
   go (doc : Doc) (col indent : Nat) : Array String := Id.run do
     match doc with
     | .text str => #[str]
-    | .newline => #["", "".pushn ' ' indent]
+    | .newline _ => #["", "".pushn ' ' indent]
     | .align doc => go doc col col
     | .nest indentOffset doc => go doc col (indent + indentOffset)
     | .concat lhs rhs =>
@@ -269,6 +276,7 @@ where
         lrender := lrender.set! (lrender.size - 1) (llast ++ rfirst)
         lrender := lrender ++ rrender[0:(rrender.size - 1)]
         lrender
+    | .reset doc => go doc col 0
     | .choice .. => panic! "Not a choice less document"
 
 /--
@@ -287,6 +295,9 @@ def Doc.print (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := �
     cost := measure.cost
   }
 
+/--
+Find an optimal layout for a document and render it.
+-/
 def Doc.prettyPrint (χ : Type) [Inhabited χ] [Cost χ] [DecidableRel (LE.le (α := χ))] (doc : Doc) (col widthLimit : Nat) : String :=
   Doc.print χ doc col widthLimit |>.layout
 
@@ -300,6 +311,38 @@ def Doc.rparen : Doc := .text ")"
 def Doc.dquote : Doc := .text "\""
 def Doc.empty : Doc := .text ""
 def Doc.space : Doc := .text " "
+def Doc.nl : Doc := .newline " "
+def Doc.break : Doc := .newline ""
+-- TODO: hard_nl and definitions based on it if necessary
+
+def Doc.flatten (doc : Doc) : Doc :=
+  match doc with
+  | .text str => .text str
+  | .newline s => .text s
+  | .align doc => .align doc.flatten
+  | .nest indentOffset doc => .nest indentOffset doc.flatten
+  | .concat lhs rhs => .concat lhs.flatten rhs.flatten
+  | .choice lhs rhs => .choice lhs.flatten rhs.flatten
+  | .reset doc => .reset doc.flatten
+
+def Doc.group (doc : Doc) : Doc := .choice doc doc.flatten
+
+/--
+Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
+column where it is to be placed in. Aka the <+> operator.
+-/
+def Doc.alignedConcat (lhs rhs : Doc) : Doc := lhs ++ .align rhs
+/--
+TODO: Better name
+-/
+def Doc.flattenedAlignedConcat (lhs rhs : Doc) : Doc := .alignedConcat (.flatten lhs) rhs
+
+def Doc.fold (f : Doc → Doc → Doc) (ds : List Doc) : Doc :=
+  match ds with
+  | [] => empty
+  | x :: xs => List.foldl f x xs
+
+def Doc.hcat (ds : List Doc) : Doc := Doc.fold .flattenedAlignedConcat ds
 
 structure DefaultCost where
   widthCost : Nat
