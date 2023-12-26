@@ -15,10 +15,11 @@ def printDocChoice (w : Nat) : String :=
     .text "while (true) {" ++
     .nest 4
       (.nl ++ .text "f();" ++ .nl ++ .text "if (done())" ++
-       .choice
-         (.space ++ exit_d)
+       (
+         (.space ++ exit_d) <|||>
          (.nest 4
            (.nl ++ exit_d))
+       )
       ) ++
     .nl ++ .text "}"
   Doc.prettyPrint (χ := DefaultCost) d 0 w
@@ -78,6 +79,55 @@ def test_group_doc_20 : IO Bool :=
        ])
     (printDocGroup 20)
 
+inductive Sexp where
+| atom (s : String)
+| list (ss : List Sexp)
+
+partial def Sexp.toDoc (s : Sexp) : Doc :=
+  let acat := Doc.fold (fun x y => x <+> .space <+> y)
+  -- TODO: When we implement failure we can add a true vcat
+  let vcat := Doc.fold (· ++ .nl ++ ·)
+  match s with
+  | .atom s => .text s
+  | .list [] => .alignedConcat .lparen .rparen
+  | .list [x] => .alignedConcat .lparen (.alignedConcat x.toDoc .rparen)
+  | .list (x :: xs) =>
+    let xDoc := x.toDoc
+    let xsDoc := xs.map Sexp.toDoc
+    .lparen <+>
+      (acat (xDoc :: xsDoc) <|||> -- the horizontal style
+       vcat (xDoc :: xsDoc) <|||> -- the vertical style
+       (xDoc <+> .space <+> vcat xsDoc)) <+> -- the argument list style
+      .rparen
+
+def Sexp.prettyPrint (s : Sexp) (w : Nat) : String := s.toDoc.prettyPrint DefaultCost 0 w
+def Sexp.example : Sexp := list [atom "a", atom "b", atom "c", atom "d"]
+
+def test_sexp_4 : IO Bool :=
+  assertEq
+    (String.intercalate "\n"
+       [ "(a"
+       , " b"
+       , " c"
+       , " d)"
+       ])
+    (Sexp.example.prettyPrint 4)
+
+def test_sexp_6 : IO Bool :=
+  assertEq
+    (String.intercalate "\n"
+       [ "(a b"
+       , "   c"
+       , "   d)"
+       ])
+    (Sexp.example.prettyPrint 6)
+
+def test_sexp_10 : IO Bool :=
+  assertEq
+    (String.intercalate "\n"
+       [ "(a b c d)" ])
+    (Sexp.example.prettyPrint 10)
+
 def runTests (tests : List (String × IO Bool)) : IO Bool := do
   for (name, test) in tests do
     if ← test then
@@ -93,6 +143,9 @@ def main : IO UInt32 := do
     ("choice 20", test_choice_doc_20),
     ("group 80", test_group_doc_80),
     ("group 20", test_group_doc_20),
+    ("sexp 4", test_sexp_4),
+    ("sexp 6", test_sexp_6),
+    ("sexp 10", test_sexp_4),
   ]
   if ret then
     return 0
