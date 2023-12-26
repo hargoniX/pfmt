@@ -319,13 +319,12 @@ def Doc.flatten (doc : Doc) : Doc :=
   match doc with
   | .text str => .text str
   | .newline s => .text s
-  | .align doc => .align doc.flatten
-  | .nest indentOffset doc => .nest indentOffset doc.flatten
+  | .align doc | .reset doc | .nest _ doc => doc.flatten
   | .concat lhs rhs => .concat lhs.flatten rhs.flatten
   | .choice lhs rhs => .choice lhs.flatten rhs.flatten
-  | .reset doc => .reset doc.flatten
 
-def Doc.group (doc : Doc) : Doc := .choice doc doc.flatten
+-- TODO: Once we have fixed left bias swap these back to verify
+def Doc.group (doc : Doc) : Doc := .choice doc.flatten doc
 
 /--
 Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
