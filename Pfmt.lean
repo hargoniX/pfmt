@@ -129,7 +129,7 @@ into a new Pareto front with correct ordering.
 private def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List (Measure χ)) (acc : List (Measure χ) := []) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
   | [], _ => acc ++ rhs
-  | _, [] => lhs
+  | _, [] => acc ++ lhs
   | l :: ls, r :: rs =>
     if l ≤ r then
       mergeSet lhs rs acc
@@ -249,7 +249,6 @@ deriving Inhabited
 Render a choice less `Doc`. For choiceful documents use `Doc.prettyPrint`.
 -/
 def Doc.render (doc : Doc) (col : Nat) : String :=
-  dbg_trace repr doc
   String.intercalate "\n" (go doc col 0).toList
 where
   /--
@@ -323,8 +322,7 @@ def Doc.flatten (doc : Doc) : Doc :=
   | .concat lhs rhs => .concat lhs.flatten rhs.flatten
   | .choice lhs rhs => .choice lhs.flatten rhs.flatten
 
--- TODO: Once we have fixed left bias swap these back to verify
-def Doc.group (doc : Doc) : Doc := .choice doc.flatten doc
+def Doc.group (doc : Doc) : Doc := .choice doc doc.flatten
 
 /--
 Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
@@ -342,6 +340,11 @@ def Doc.fold (f : Doc → Doc → Doc) (ds : List Doc) : Doc :=
   | x :: xs => List.foldl f x xs
 
 def Doc.hcat (ds : List Doc) : Doc := Doc.fold .flattenedAlignedConcat ds
+
+-- TODO: See how we can get some nicer choice operator
+@[inherit_doc] scoped infixl:65 " <|||> "  => Doc.choice
+@[inherit_doc] scoped infixl:65 " <+> "  => Doc.alignedConcat
+@[inherit_doc] scoped infixl:65 " <-> "  => Doc.flattenedAlignedConcat
 
 structure DefaultCost where
   widthCost : Nat
