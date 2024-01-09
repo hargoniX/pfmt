@@ -314,6 +314,9 @@ def Doc.nl : Doc := .newline " "
 def Doc.break : Doc := .newline ""
 -- TODO: hard_nl and definitions based on it if necessary
 
+/--
+Replace all newlines in the `Doc` with their flat string.
+-/
 def Doc.flatten (doc : Doc) : Doc :=
   match doc with
   | .text str => .text str
@@ -322,11 +325,14 @@ def Doc.flatten (doc : Doc) : Doc :=
   | .concat lhs rhs => .concat lhs.flatten rhs.flatten
   | .choice lhs rhs => .choice lhs.flatten rhs.flatten
 
+/--
+Lay out a `Doc` or its `Doc.flatten`ed version.
+-/
 def Doc.group (doc : Doc) : Doc := .choice doc doc.flatten
 
 /--
 Aligned concatenation, joins two sub-layouts horizontally, aligning the whole right sub-layout at the
-column where it is to be placed in. Aka the <+> operator.
+column where it is to be placed in. Aka the `<+>` operator.
 -/
 def Doc.alignedConcat (lhs rhs : Doc) : Doc := lhs ++ .align rhs
 /--
@@ -339,6 +345,10 @@ def Doc.fold (f : Doc → Doc → Doc) (ds : List Doc) : Doc :=
   | [] => empty
   | x :: xs => List.foldl f x xs
 
+/--
+Lay out a list of `Doc`s line by line. Aka `vcat`.
+-/
+def Doc.lines (ds : List Doc) : Doc := Doc.fold (· ++ .nl ++ ·) ds
 def Doc.hcat (ds : List Doc) : Doc := Doc.fold .flattenedAlignedConcat ds
 
 -- TODO: See how we can get some nicer choice operator
@@ -379,5 +389,17 @@ def DefaultCost.nl (_indent : Nat) : DefaultCost :=
 instance : Cost DefaultCost where
   text := DefaultCost.text
   nl := DefaultCost.nl
+
+#eval
+  let argD := (.nl ++ .text "arg1" ++ .nl ++ .text "arg2")
+  let d :=
+    .text "let ident :=" ++
+    (
+     (.space ++ .text "func" ++ .flatten argD)
+     <|||> 
+     (.nest 2 (.nl ++ .text "func" ++ (.nest 2 argD)))
+    )
+  let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
+  IO.println out
 
 end Pfmt

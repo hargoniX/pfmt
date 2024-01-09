@@ -85,19 +85,17 @@ inductive Sexp where
 
 partial def Sexp.toDoc (s : Sexp) : Doc :=
   let acat := Doc.fold (fun x y => x <+> .space <+> y)
-  -- TODO: When we implement failure we can add a true vcat
-  let vcat := Doc.fold (· ++ .nl ++ ·)
   match s with
   | .atom s => .text s
-  | .list [] => .alignedConcat .lparen .rparen
-  | .list [x] => .alignedConcat .lparen (.alignedConcat x.toDoc .rparen)
+  | .list [] => .lparen <+> .rparen
+  | .list [x] => .lparen <+> x.toDoc <+> .rparen
   | .list (x :: xs) =>
     let xDoc := x.toDoc
     let xsDoc := xs.map Sexp.toDoc
     .lparen <+>
       (acat (xDoc :: xsDoc) <|||> -- the horizontal style
-       vcat (xDoc :: xsDoc) <|||> -- the vertical style
-       (xDoc <+> .space <+> vcat xsDoc)) <+> -- the argument list style
+       .lines (xDoc :: xsDoc) <|||> -- the vertical style
+       (xDoc <+> .space <+> .lines xsDoc)) <+> -- the argument list style
       .rparen
 
 def Sexp.prettyPrint (s : Sexp) (w : Nat) : String := s.toDoc.prettyPrint DefaultCost 0 w
@@ -151,3 +149,6 @@ def main : IO UInt32 := do
     return 0
   else
     return 1
+
+
+#check Nat.rec
