@@ -126,6 +126,23 @@ def test_sexp_10 : IO Bool :=
        [ "(a b c d)" ])
     (Sexp.example.prettyPrint 10)
 
+def print_nested_choice (w : Nat) : String :=
+  let d := (Doc.concat
+   ((Doc.choice (Doc.text " ") (Doc.newline " ")))
+       (Doc.choice
+         (Doc.text "bc")
+         (Doc.concat
+           (Doc.newline " ")
+           (Doc.concat (Doc.choice (Doc.text "b") (Doc.newline " ")) (Doc.text "c")))))
+  Doc.prettyPrint (χ := DefaultCost) d 0 w
+
+
+def test_nested_choice : IO Bool :=
+  assertEq
+    (String.intercalate "\n"
+       [ " bc" ])
+    (print_nested_choice 10)
+
 def runTests (tests : List (String × IO Bool)) : IO Bool := do
   for (name, test) in tests do
     if ← test then
@@ -144,6 +161,7 @@ def main : IO UInt32 := do
     ("sexp 4", test_sexp_4),
     ("sexp 6", test_sexp_6),
     ("sexp 10", test_sexp_4),
+    ("nested choice 10", test_nested_choice)
   ]
   if ret then
     return 0
