@@ -128,8 +128,8 @@ into a new Pareto front with correct ordering.
 -/
 private def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List (Measure χ)) (acc : List (Measure χ) := []) : List (Measure χ) :=
   match h1:lhs, h2:rhs with
-  | [], _ => acc ++ rhs
-  | _, [] => acc ++ lhs
+  | [], _ => acc.reverse ++ rhs
+  | _, [] => acc.reverse ++ lhs
   | l :: ls, r :: rs =>
     if l ≤ r then
       mergeSet lhs rs acc
@@ -139,7 +139,7 @@ private def mergeSet [Cost χ] [DecidableRel (LE.le (α := χ))] (lhs rhs : List
       mergeSet ls rhs (l :: acc)
     else
       mergeSet lhs rs (r :: acc)
-termination_by mergeSet lhs rhs acc => lhs.length + rhs.length
+termination_by lhs.length + rhs.length
 
 /--
 Combine the results from two `MeasureSet`s.
@@ -396,7 +396,7 @@ instance : Cost DefaultCost where
     .text "let ident :=" ++
     (
      (.space ++ .text "func" ++ .flatten argD)
-     <|||> 
+     <|||>
      (.nest 2 (.nl ++ .text "func" ++ (.nest 2 argD)))
     )
   let out := Doc.prettyPrint DefaultCost (col := 0) (widthLimit := 20) d
